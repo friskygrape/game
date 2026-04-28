@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Kitchen — Find the Rabbit</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #e8e0f0; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+<script>
+'use strict';
+
+// ── Renderer ──────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+// ── Scene ─────────────────────────────────────────────────
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xe8e0f0);
+
+// ── Isometric Camera ──────────────────────────────────────
+const aspect = window.innerWidth / window.innerHeight;
+const V = 13;
+const camera = new THREE.OrthographicCamera(-V * aspect, V * aspect, V, -V, 0.1, 200);
+camera.position.set(22, 22, 22);
+camera.lookAt(0, 3, 0);
+
+// ── Lighting ──────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0xf0e8ff, 0.60));
+
+const sun = new THREE.DirectionalLight(0xffffff, 0.88);
+sun.position.set(14, 28, 14);
+sun.castShadow = true;
+sun.shadow.camera.left = sun.shadow.camera.bottom = -22;
+sun.shadow.camera.right = sun.shadow.camera.top   =  22;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.bias = -0.001;
+scene.add(sun);
+
+const fill = new THREE.DirectionalLight(0xc8deff, 0.28);
+fill.position.set(5, 8, 20);
+scene.add(fill);
+
+// ── Helpers ───────────────────────────────────────────────
+const _mc = {};
+const mat = hex => _mc[hex] || (_mc[hex] = new THREE.MeshLambertMaterial({ color: hex }));
+
+// x, z = horizontal center; y = BOTTOM face of the box
+function b(w, h, d, hex, x, y, z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(hex));
+  m.position.set(x, y + h * 0.5, z);
+  m.castShadow = m.receiveShadow = true;
+  scene.add(m);
+  return m;
+}
+
+// ── Palette ───────────────────────────────────────────────
+const WALL   = 0xc4ddd5;  // soft sage mint
+const FLOOR  = 0xf5ead4;  // warm parchment
+const FLOORA = 0xedd8b0;  // slightly deeper parchment
+const TRIM   = 0xe0b898;  // pastel peach-wood
+const CAB    = 0xa8c4e8;  // cornflower pastel blue
+const CABDK  = 0x88a8d0;  // slightly deeper cornflower
+const CTOP   = 0xf2ede6;  // off-white cream
+const FRG    = 0xf5b888;  // pastel apricot
+const FRGH   = 0xfad0a8;  // lighter apricot
+const OVN    = 0xb8c0d0;  // pastel blue-grey
+const OVNDK  = 0x909098;  // medium grey
+const STL    = 0xc8ccd8;  // soft silver
+const TBL    = 0xf5e080;  // pastel butter yellow
+const TBLDK  = 0xe8d070;  // slightly deeper butter
+const GLASS  = 0xd0e8f5;  // very pale sky blue
+const WFRAME = 0x90b8d0;  // pastel steel blue
+const CURTN  = 0xf5b0c8;  // pastel blush pink
+const WOOD   = 0xddb890;  // pastel warm beige
+const GRN    = 0xa8cc98;  // pastel sage green
+const RED    = 0xf0a090;  // pastel coral
+const BLU    = 0xa0b8e8;  // pastel periwinkle
+const PNK    = 0xf5b0c8;  // soft blush
+const YLW    = 0xf5e088;  // pastel lemon
+const DGY    = 0x707880;  // muted slate
+const GY     = 0xc0c4cc;  // light grey
+const ORG    = 0xf8c090;  // pastel peach
+const CRM    = 0xfaf2e0;  // lightest cream
+const WHT    = 0xf8f4ee;  // warm white
+
+// ── Room Shell ────────────────────────────────────────────
+b(12, 0.25, 12, FLOOR, 0, -0.25, 0);
+
+for (let x = -5; x <= 5; x += 2)
+  for (let z = -5; z <= 5; z += 2)
+    b(0.85, 0.05, 0.85, FLOORA, x, 0, z);
+
+b(0.3, 9, 12, WALL, -6, 0, 0);
+b(12, 9, 0.3, WALL, 0, 0, -6);
+
+b(0.5, 0.4, 12.5, TRIM, -6, 9, 0);
+b(12.5, 0.4, 0.5, TRIM,  0, 9, -6);
+b(0.5, 9, 0.5, TRIM, -6, 0, -6);
+
+b(0.15, 0.3, 12, TRIM, -6, 0, 0);
+b(12, 0.3, 0.15, TRIM,  0, 0, -6);
+
+// ── L-Shaped Lower Cabinets ───────────────────────────────
+// Toe kicks (solid, no change)
+b(6.2, 0.28, 1.45, CABDK, -3.1, 0, -5.3);
+b(1.45, 0.28, 6.6, CABDK, -5.3, 0, -2.7);
+
+// Corner block (solid — no door)
+b(1.55, 3.05, 1.55, CAB, -5.3, 0, -5.3);
+
+// Back-wall cabinet — hollow shell (open front at z = -4.525)
+b(6.2, 3.05, 0.10, CAB, -3.1,  0,    -6.025); // back wall
+b(0.10, 3.05, 1.55, CAB, -6.15, 0,   -5.3);   // left wall
+b(0.10, 3.05, 1.55, CAB, -0.05, 0,   -5.3);   // right wall
+b(6.00, 0.10, 1.55, CAB, -3.1,  2.95, -5.3);  // top
+b(6.00, 0.10, 1.55, CAB, -3.1,  0,    -5.3);  // bottom
+// Interior surfaces
+b(6.00, 2.85, 0.04, 0xfaf2e8, -3.1, 0.10, -5.978); // back panel (warm cream)
+b(0.08, 2.85, 1.35, CABDK, -4.1, 0.10, -5.3);       // divider between doors 1-2
+b(0.08, 2.85, 1.35, CABDK, -2.1, 0.10, -5.3);       // divider between doors 2-3
+// Interior items — back-wall cabinet
+// Section 1 (x -6.2→-4.4): pots & pans
+b(0.62, 0.75, 0.62, 0x8090a0, -5.55, 0.10, -5.30); // large pot
+b(0.68, 0.09, 0.68, 0x9098a8, -5.55, 0.85, -5.30); // pot lid
+b(0.55, 0.16, 0.55, 0x707888, -4.75, 0.10, -5.30); // flat pan
+// Section 2 (x -4.4→-2.4): bowls
+b(0.60, 0.36, 0.60, WHT,  -3.55, 0.10, -5.30); // mixing bowl
+b(0.48, 0.16, 0.48, 0xfaf2e8, -3.55, 0.36, -5.30); // bowl lip lighter
+b(0.50, 0.30, 0.50, STL,  -2.95, 0.10, -5.30); // colander (steel)
+// Section 3 (x -2.4→-0.1): dry goods
+b(0.32, 0.88, 0.20, RED,  -1.80, 0.10, -5.56); // cereal box A
+b(0.32, 0.82, 0.20, YLW,  -1.70, 0.10, -5.56); // cereal box B
+b(0.26, 0.40, 0.26, BLU,  -1.30, 0.10, -5.35); // canned beans
+b(0.28, 0.48, 0.17, ORG,  -0.80, 0.10, -5.56); // snack bag
+
+// Left-wall cabinet — hollow shell (open right face at x = -4.525)
+b(0.10, 3.05, 6.60, CAB, -6.025, 0, -2.7);    // back wall (left face)
+b(1.55, 3.05, 0.10, CAB, -5.3,   0, -5.95);   // far wall (z−)
+b(1.55, 3.05, 0.10, CAB, -5.3,   0,  0.55);   // near wall (z+)
+b(1.35, 0.10, 6.40, CAB, -5.3,  2.95, -2.7);  // top
+b(1.35, 0.10, 6.40, CAB, -5.3,   0,   -2.7);  // bottom
+// Interior surfaces
+b(0.04, 2.85, 6.20, 0xfaf2e8, -5.975, 0.10, -2.7); // back panel
+b(1.35, 2.85, 0.08, CABDK, -5.3, 0.10, -3.80);      // divider 1-2
+b(1.35, 2.85, 0.08, CABDK, -5.3, 0.10, -1.70);      // divider 2-3
+// Interior items — left-wall cabinet
+// Section 1 (z -6.0→-4.1): stock pot
+b(0.65, 0.88, 0.65, 0x8090a0, -5.30, 0.10, -5.30); // stock pot
+b(0.70, 0.09, 0.70, 0x9098a8, -5.30, 0.98, -5.30); // pot lid
+// Section 2 (z -4.1→-2.1): baking
+b(1.10, 0.11, 1.20, 0xa8aabc, -5.30, 0.10, -3.10); // baking tray
+b(1.10, 0.10, 0.68, STL,      -5.30, 0.21, -3.10); // muffin tin on top
+b(0.88, 0.36, 0.88, 0xe8d4b8, -5.30, 0.31, -3.10); // casserole dish
+// Section 3 (z -2.1→0.6): storage containers
+b(0.85, 0.46, 1.00, CRM,      -5.30, 0.10, -0.80); // stacked containers
+b(0.90, 0.07, 1.05, 0xe0e4ec, -5.30, 0.56, -0.80); // clear lid
+b(0.28, 0.36, 0.28, 0xb8d8c0, -5.30, 0.10,  0.30); // small jar
+
+// Countertops
+b(6.5, 0.2, 1.95, CTOP, -3.1, 3.05, -5.2);
+b(1.95, 0.2, 7.0, CTOP, -5.2, 3.05, -2.5);
+
+// ── Fridge — hollow shell (open front at z = -3.9) ───────
+// Exterior walls
+b(2.30, 5.70, 0.12, FRG, 4.5,  0,    -6.04);  // back
+b(0.12, 5.70, 2.20, FRG, 3.41, 0,    -5.0);   // left
+b(0.12, 5.70, 2.20, FRG, 5.59, 0,    -5.0);   // right
+b(2.06, 0.12, 2.20, FRG, 4.5,  5.58, -5.0);   // top
+b(2.06, 0.12, 2.20, FRG, 4.5,  0,    -5.0);   // bottom
+// Interior back panel (off-white)
+b(2.06, 5.46, 0.04, 0xf8f5f2, 4.5, 0.12, -5.958);
+// Fridge/freezer divider shelf at y = 3.95
+b(2.06, 0.08, 2.00, 0xd8dcd8, 4.5, 3.95, -4.97);
+// Glass shelves
+b(2.06, 0.05, 1.96, 0xc8e4d0, 4.5, 1.40, -4.97);
+b(2.06, 0.05, 1.96, 0xc8e4d0, 4.5, 2.72, -4.97);
+// Vegetable crisper drawer
+b(1.80, 0.36, 0.82, 0xd0e8c8, 4.5, 0.12, -5.42);
+
+// Fridge food — bottom zone (y 0.12→1.40)
+b(0.30, 0.88, 0.22, WHT, 5.30, 0.12, -5.60);   // milk carton
+b(0.30, 0.88, 0.22, ORG, 4.90, 0.12, -5.60);   // OJ carton
+b(0.65, 0.28, 0.22, GRN, 4.50, 0.25, -5.40);   // veg in drawer
+
+// Fridge food — middle zone (y 1.45→2.72)
+b(0.65, 0.26, 0.48, CRM,       4.20, 1.45, -5.40); // leftover tub
+b(0.40, 0.20, 0.30, YLW,       5.22, 1.45, -5.56); // cheese wedge
+b(0.17, 0.52, 0.17, RED,       5.33, 1.45, -5.22); // ketchup bottle
+b(0.26, 0.44, 0.26, 0xa8c890,  3.62, 1.45, -5.50); // pickle jar (green)
+
+// Fridge food — upper zone (y 2.77→3.95)
+b(0.48, 0.18, 0.26, YLW,       4.10, 2.77, -5.62); // butter block
+b(0.52, 0.20, 0.46, BLU,       4.82, 2.77, -5.35); // leftover container
+b(0.19, 0.48, 0.19, 0xa8c8e8,  5.30, 2.77, -5.52); // water bottle
+
+// Freezer section (y 4.03→5.58)
+b(1.50, 0.07, 0.58, 0xd8eef8, 4.5,  4.03, -5.35); // ice cube tray
+b(0.58, 0.44, 0.48, BLU,       5.22, 4.03, -5.55); // frozen dinner box
+b(0.44, 0.40, 0.44, PNK,       3.82, 4.03, -5.55); // ice cream tub
+
+// ── Oven / Stove ──────────────────────────────────────────
+b(2.3, 3.05, 2.0, OVN, 1.8, 0, -5.2);
+b(2.0, 1.7, 0.1, OVNDK, 1.8, 0.2, -4.26);
+b(1.5, 0.9, 0.07, 0x202028, 1.8, 0.45, -4.21);
+b(2.3, 0.1, 2.0, DGY, 1.8, 3.05, -5.2);
+b(0.55, 0.06, 0.55, 0x282830, 1.1, 3.11, -4.7);
+b(0.55, 0.06, 0.55, 0x282830, 2.5, 3.11, -4.7);
+b(0.55, 0.06, 0.55, 0x282830, 1.1, 3.11, -5.7);
+b(0.55, 0.06, 0.55, 0x282830, 2.5, 3.11, -5.7);
+b(0.22, 0.22, 0.1, STL, 1.0, 2.74, -4.22);
+b(0.22, 0.22, 0.1, STL, 1.8, 2.74, -4.22);
+b(0.22, 0.22, 0.1, STL, 2.6, 2.74, -4.22);
+
+// ── Sink ──────────────────────────────────────────────────
+b(1.85, 0.1, 1.25, WHT,      -2.0, 3.1, -5.4);
+b(1.45, 0.1, 0.95, 0x90aab8, -2.0, 3.1, -5.4);
+b(0.1, 0.55, 0.1, STL, -2.0, 3.2, -5.9);
+b(0.58, 0.1, 0.1, STL, -2.0, 3.75, -5.9);
+
+// ── Upper Shelf Unit ──────────────────────────────────────
+b(4.5, 0.22, 1.3, CAB, 2.8, 7.2, -5.65);
+b(4.5, 0.22, 1.3, CAB, 2.8, 5.8, -5.65);
+b(4.5, 0.22, 1.3, CAB, 2.8, 4.5, -5.65);
+b(0.22, 2.92, 1.3, CABDK, 0.8, 4.5, -5.65);
+b(0.22, 2.92, 1.3, CABDK, 4.8, 4.5, -5.65);
+b(0.65, 0.68, 0.52, YLW, 1.5, 5.8, -5.65);
+b(0.65, 0.68, 0.52, BLU, 2.3, 5.8, -5.65);
+b(0.65, 0.68, 0.52, PNK, 3.1, 5.8, -5.65);
+b(0.5,  0.48, 0.48, WHT, 3.9, 5.8, -5.65);
+b(0.7,  0.44, 0.58, CRM, 2.0, 7.2, -5.65);
+b(0.7,  0.44, 0.58, PNK, 3.2, 7.2, -5.65);
+
+// ── Spice Rack ────────────────────────────────────────────
+b(0.55, 3.5, 0.48, WOOD, 5.9, 3.1, -5.6);
+b(0.5, 0.1, 0.44, TRIM, 5.9, 3.1,  -5.6);
+b(0.5, 0.1, 0.44, TRIM, 5.9, 4.22, -5.6);
+b(0.5, 0.1, 0.44, TRIM, 5.9, 5.35, -5.6);
+b(0.28, 0.5, 0.28, RED, 5.9, 3.2,  -5.6);
+b(0.28, 0.5, 0.28, ORG, 5.9, 4.32, -5.6);
+b(0.28, 0.5, 0.28, YLW, 5.9, 5.45, -5.6);
+
+// ── Window ────────────────────────────────────────────────
+b(0.14, 3.85, 3.85, WFRAME, -5.92, 4.15, -3.0);
+b(0.07, 1.55, 1.55, GLASS, -5.87, 6.2, -2.1);
+b(0.07, 1.55, 1.55, GLASS, -5.87, 6.2, -3.9);
+b(0.07, 1.55, 1.55, GLASS, -5.87, 4.5, -2.1);
+b(0.07, 1.55, 1.55, GLASS, -5.87, 4.5, -3.9);
+b(0.07, 0.07, 5.2, STL, -5.88, 8.12, -3.0);
+b(0.1, 2.6, 0.62, CURTN, -5.87, 5.5, -1.1);
+b(0.1, 2.6, 0.62, CURTN, -5.87, 5.5, -4.9);
+b(0.1, 0.18, 4.3, TRIM, -5.87, 4.0, -3.0);
+b(0.65, 0.42, 0.65, RED,  -5.82, 3.18, -2.2);
+b(0.48, 0.58, 0.48, GRN,  -5.82, 3.6,  -2.2);
+b(0.3,  0.45, 0.3,  GRN,  -5.82, 4.18, -2.2);
+
+// ── Wall Shelves ──────────────────────────────────────────
+b(0.1, 0.2, 2.4, WOOD,  -5.87, 6.55, -5.2);
+b(0.1, 0.4, 0.12, TRIM,  -5.87, 6.15, -4.2);
+b(0.1, 0.4, 0.12, TRIM,  -5.87, 6.15, -6.1);
+b(0.46, 0.6, 0.46, BLU,  -5.82, 6.75, -4.6);
+b(0.46, 0.6, 0.46, PNK,  -5.82, 6.75, -5.7);
+
+b(0.1, 0.2, 2.4, WOOD,  -5.87, 5.15, -5.2);
+b(0.1, 0.4, 0.12, TRIM,  -5.87, 4.75, -4.2);
+b(0.1, 0.4, 0.12, TRIM,  -5.87, 4.75, -6.1);
+b(0.5, 0.5, 0.5, GRN, -5.82, 5.35, -5.2);
+
+// ── Wall Clock ────────────────────────────────────────────
+b(0.1,  1.28, 1.28, YLW, -5.9, 6.8, -5.85);
+b(0.07, 1.05, 1.05, WHT, -5.88, 6.8, -5.85);
+b(0.06, 0.07, 0.48, DGY, -5.86, 7.28, -5.85);
+b(0.06, 0.32, 0.07, DGY, -5.86, 7.12, -5.85);
+
+// ── Wall Art ──────────────────────────────────────────────
+b(0.1, 1.3, 1.1, CRM, -3.5, 5.8, -5.9);
+b(0.07, 1.0, 0.85, ORG, -3.5, 5.8, -5.88);
+b(0.1, 1.3, 1.1, CRM, -5.0, 6.8, -5.9);
+b(0.07, 1.0, 0.85, BLU, -5.0, 6.8, -5.88);
+
+// ── Dining Table ──────────────────────────────────────────
+b(4.0, 0.3, 2.4, TBL, 0.5, 3.1, 2.5);
+b(0.28, 3.1, 0.28, TBLDK, -1.4, 0, 1.45);
+b(0.28, 3.1, 0.28, TBLDK,  2.4, 0, 1.45);
+b(0.28, 3.1, 0.28, TBLDK, -1.4, 0, 3.55);
+b(0.28, 3.1, 0.28, TBLDK,  2.4, 0, 3.55);
+b(0.88, 0.07, 0.88, CRM,  0.2, 3.4, 2.4);
+b(0.42, 0.38, 0.42, BLU,  1.3, 3.4, 2.0);
+b(0.65, 0.12, 0.65, 0xe8d4b8, 0.2, 3.47, 2.4);
+
+// ── Chairs ────────────────────────────────────────────────
+b(1.4, 0.2, 1.4, TBL,   -0.3, 2.2, 4.85);
+b(1.4, 1.9, 0.2, TBL,   -0.3, 2.4, 4.17);
+b(0.2, 2.2, 0.2, TBLDK, -0.9, 0, 4.35);
+b(0.2, 2.2, 0.2, TBLDK,  0.3, 0, 4.35);
+b(0.2, 2.2, 0.2, TBLDK, -0.9, 0, 5.35);
+b(0.2, 2.2, 0.2, TBLDK,  0.3, 0, 5.35);
+
+b(1.4, 0.2, 1.4, TBL,   3.15, 2.2, 2.5);
+b(1.4, 1.9, 0.2, TBL,   3.15, 2.4, 1.85);
+b(0.2, 2.2, 0.2, TBLDK, 2.55, 0, 1.9);
+b(0.2, 2.2, 0.2, TBLDK, 3.75, 0, 1.9);
+b(0.2, 2.2, 0.2, TBLDK, 2.55, 0, 3.1);
+b(0.2, 2.2, 0.2, TBLDK, 3.75, 0, 3.1);
+
+// ── Counter Appliances & Decor ────────────────────────────
+b(0.9, 0.72, 0.65, STL, -0.8, 3.25, -5.42);
+b(0.2, 0.48, 0.1, DGY, -0.6, 3.62, -5.08);
+b(0.2, 0.48, 0.1, DGY, -1.0, 3.62, -5.08);
+
+b(0.95, 0.2, 0.95, WOOD, -4.2, 3.25, -5.3);
+b(0.34, 0.4, 0.34, RED,  -4.5, 3.45, -5.32);
+b(0.34, 0.4, 0.34, ORG,  -4.1, 3.45, -5.12);
+b(0.28, 0.5, 0.28, GRN,  -4.3, 3.45, -5.52);
+
+b(0.28, 0.85, 0.65, WOOD, -5.28, 3.25, -0.2);
+
+b(0.5, 0.38, 0.5, ORG, -5.28, 3.25, -4.5);
+b(0.38, 0.5, 0.38, GRN, -5.28, 3.63, -4.5);
+
+// ── Door System ───────────────────────────────────────────
+//
+// Each door is a THREE.Group (pivot) placed at the hinge world position.
+// The door panel mesh is offset inside the group so its edge sits at the pivot.
+// Rotating pivot.rotation.y swings the door open/closed.
+//
+// THREE.js Y-rotation transforms local coords:
+//   x' = x·cos θ + z·sin θ
+//   z' = −x·sin θ + z·cos θ
+//
+// Back-wall doors (face z≈−4.52, hinge at left-x edge):
+//   open angle −π/2 → door swings toward +z (camera side)
+//
+// Left-wall doors (face x≈−4.52, hinge at far-z edge):
+//   open angle +π/2 → door swings toward +x (kitchen interior)
+//
+// Fridge/freezer (face z≈−3.95, hinge at left-x edge x=3.35):
+//   open angle −3π/4 → door swings wide into kitchen
+
+const doors      = [];   // { pivot, open, openAngle }
+const meshToDoor = new Map();
+
+function makeDoor(gW, gH, gD, hex, px, py, pz, ox, oy, oz, openAngle) {
+  const pivot = new THREE.Group();
+  pivot.position.set(px, py, pz);
+  scene.add(pivot);
+
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(gW, gH, gD), mat(hex));
+  mesh.position.set(ox, oy, oz);
+  mesh.castShadow = mesh.receiveShadow = true;
+  pivot.add(mesh);
+
+  const door = { pivot, open: false, openAngle };
+  meshToDoor.set(mesh, door);
+  doors.push(door);
+  return door;
+}
+
+function addPart(door, gW, gH, gD, hex, lx, ly, lz) {
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(gW, gH, gD), mat(hex));
+  mesh.position.set(lx, ly, lz);
+  mesh.castShadow = mesh.receiveShadow = true;
+  door.pivot.add(mesh);
+  meshToDoor.set(mesh, door);  // clicking any part toggles the door
+}
+
+// — Fridge door ————————————————————————————————————————————
+// Body center: (4.5, y, -5.0). Front face at z = -5.0 + 1.1 = -3.9.
+// Door panel: 2.3 × 3.85 × 0.1, world center (4.5, 2.025, -3.95).
+// Hinge at left edge: x = 4.5 − 1.15 = 3.35.
+// Pivot at (3.35, 2.025, -3.95); mesh offset (+1.15, 0, 0).
+const fridgeDoor = makeDoor(
+  2.3, 3.85, 0.1, FRG,
+  3.35, 2.025, -3.95,
+  1.15, 0, 0,
+  -Math.PI * 0.75
+);
+// Handle: world (3.5, 2.76, -3.88) → local (0.15, 0.735, 0.07)
+addPart(fridgeDoor, 0.1, 0.72, 0.12, WHT, 0.15, 0.735, 0.07);
+
+// — Freezer door ———————————————————————————————————————————
+// Door panel: 2.3 × 1.55 × 0.1, world center (4.5, 4.725, -3.95).
+// Pivot at (3.35, 4.725, -3.95); mesh offset (+1.15, 0, 0).
+const freezerDoor = makeDoor(
+  2.3, 1.55, 0.1, FRGH,
+  3.35, 4.725, -3.95,
+  1.15, 0, 0,
+  -Math.PI * 0.75
+);
+// Handle: world (3.5, 4.81, -3.88) → local (0.15, 0.085, 0.07)
+addPart(freezerDoor, 0.1, 0.42, 0.12, WHT, 0.15, 0.085, 0.07);
+// Divider trim between fridge/freezer: world (4.5, 4.0, -3.92) → local (1.15, -0.725, 0.03)
+addPart(freezerDoor, 2.3, 0.1, 0.1, TRIM, 1.15, -0.725, 0.03);
+
+// — Back-wall cabinet doors ————————————————————————————————
+// Interior x: −6.10 to −0.10 (6.00 wide). Three equal 2.0-wide doors.
+// Hinges flush with cabinet interior left faces: −6.10, −4.10, −2.10.
+// Handle at free (right) edge: local x = 1.85, local z = 0.06.
+const BW_HINGES = [-6.10, -4.10, -2.10];
+BW_HINGES.forEach(hx => {
+  const d = makeDoor(
+    2.0, 2.6, 0.1, CAB,
+    hx, 1.58, -4.52,
+    1.0, 0, 0,
+    -Math.PI * 0.5
+  );
+  addPart(d, 0.12, 0.4, 0.1, GY,  1.85, 0.12, 0.06);
+});
+
+// — Left-wall cabinet doors ————————————————————————————————
+// Interior z: −5.90 to 0.50. Three 2.1-wide doors; hinges at section starts.
+// Handle at free (near/+z) edge: local z = 1.95, local x = 0.06.
+const LW_HINGES = [-5.90, -3.80, -1.70];
+LW_HINGES.forEach(hz => {
+  const d = makeDoor(
+    0.1, 2.6, 2.1, CAB,
+    -4.52, 1.58, hz,
+    0, 0, 1.05,
+    Math.PI * 0.5
+  );
+  addPart(d, 0.1, 0.4, 0.12, GY,  0.06, 0.12, 1.95);
+});
+
+// ── Interaction ───────────────────────────────────────────
+
+const raycaster = new THREE.Raycaster();
+const mouse     = new THREE.Vector2();
+const allMeshes = [...meshToDoor.keys()];
+
+canvas.addEventListener('click', e => {
+  mouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(allMeshes);
+  if (!hits.length) return;
+  const door = meshToDoor.get(hits[0].object);
+  if (door) door.open = !door.open;
+});
+
+canvas.addEventListener('mousemove', e => {
+  mouse.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse, camera);
+  const hits = raycaster.intersectObjects(allMeshes);
+  canvas.style.cursor = hits.length ? 'pointer' : 'default';
+});
+
+// ── Render loop ───────────────────────────────────────────
+
+const clock = new THREE.Clock();
+const SPEED = 4.0; // radians per second
+
+(function loop() {
+  requestAnimationFrame(loop);
+  const dt = Math.min(clock.getDelta(), 0.1);
+
+  for (const d of doors) {
+    const target = d.open ? d.openAngle : 0;
+    const diff   = target - d.pivot.rotation.y;
+    if (Math.abs(diff) > 0.001) {
+      d.pivot.rotation.y += diff * Math.min(1, SPEED * dt);
+    } else {
+      d.pivot.rotation.y = target;
+    }
+  }
+
+  renderer.render(scene, camera);
+})();
+
+// ── Resize ────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  const a = window.innerWidth / window.innerHeight;
+  camera.left = -V * a; camera.right = V * a;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
