@@ -1214,9 +1214,9 @@ const AMBIENT_DUR    = 450;
   }
 
   // Pinball ball + bumper flash animation
-  { const item = clickables.get(pinballBack);
-    if (item.on && item.flickerStart === null) {
-      const dt = _pb.prevT ? Math.min((now - _pb.prevT) * 0.001, 0.05) : 0;
+  { const pbOn = clickables.get(pinballBack).on;
+    if (pbOn) {
+      const dt = _pb.prevT ? Math.min((now - _pb.prevT) * 0.001, 0.05) : 0.016;
       _pb.prevT = now;
       _pb.x += _pb.vx * dt;
       _pb.z += _pb.vz * dt;
@@ -1243,7 +1243,7 @@ const AMBIENT_DUR    = 450;
           const dot = _pb.vx*nx + _pb.vz*nz;
           _pb.vx -= 2*dot*nx; _pb.vz -= 2*dot*nz;
           const s = Math.sqrt(_pb.vx*_pb.vx + _pb.vz*_pb.vz);
-          _pb.vx = (_pb.vx/s) * Math.max(s, 1.8);  // bumper gives a kick
+          _pb.vx = (_pb.vx/s) * Math.max(s, 1.8);
           _pb.vz = (_pb.vz/s) * Math.max(s, 1.8);
           _pb.x = bmp.x + nx * 0.38;
           _pb.z = bmp.z + nz * 0.38;
@@ -1260,12 +1260,9 @@ const AMBIENT_DUR    = 450;
       ballMesh.position.set(_pb.x, pfY(_pb.z) + 0.10, _pb.z);
     } else {
       _pb.prevT = 0;
-      if (!item.on) {
-        // Reset to plunger lane when off
-        _pb.x = PX - 0.20; _pb.z = PZ - 0.50;
-        ballMesh.position.set(PX + 0.88, pfY(PZ + 0.60) + 0.10, PZ + 0.60);
-        for (const bmp of _bumpers) bmp.mat.emissiveIntensity = bmp.baseInt;
-      }
+      _pb.x = PX - 0.20; _pb.z = PZ - 0.50;
+      ballMesh.position.set(PX + 0.88, pfY(PZ + 0.60) + 0.10, PZ + 0.60);
+      for (const bmp of _bumpers) bmp.mat.emissiveIntensity = bmp.baseInt;
     }
   }
 
