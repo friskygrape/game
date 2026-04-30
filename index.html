@@ -818,12 +818,12 @@ b(0.52, 1.00, 0.08, ADARK, SX, 4.50, SZ + 0.01);
 
 // LED indicator — red when off, green when on
 const switchLedMat = new THREE.MeshStandardMaterial({
-  color: 0xff2200, emissive: 0xff2200, emissiveIntensity: 2.5, roughness: 0.3
+  color: 0x00eeff, emissive: 0x00eeff, emissiveIntensity: 2.5, roughness: 0.3
 });
 b(0.16, 0.16, 0.12, switchLedMat, SX, 5.28, SZ + 0.02);
 
 // Glow light behind the LED — pulses when power is off
-const switchGlowLight = new THREE.PointLight(0xff2200, 2.0, 3.5);
+const switchGlowLight = new THREE.PointLight(0x00eeff, 2.0, 3.5);
 switchGlowLight.position.set(SX, 5.36, SZ + 0.5);
 scene.add(switchGlowLight);
 
@@ -900,7 +900,7 @@ canvas.addEventListener('click', e => {
   if (raycaster.intersectObject(switchHitArea).length) {
     powerOn = !powerOn;
     powerSwitch.position.y = powerOn ? LEVER_ON_Y : LEVER_OFF_Y;
-    const ledColor = powerOn ? 0x00ff44 : 0xff2200;
+    const ledColor = powerOn ? 0x00ff44 : 0x00eeff;
     switchLedMat.color.set(ledColor);
     switchLedMat.emissive.set(ledColor);
     if (powerOn) {
@@ -908,7 +908,7 @@ canvas.addEventListener('click', e => {
       switchGlowLight.color.set(0x00ff44);
       switchGlowLight.intensity = 0;
     } else {
-      switchGlowLight.color.set(0xff2200);
+      switchGlowLight.color.set(0x00eeff);
     }
     for (const item of clickables.values()) {
       powerOn ? turnOn(item) : turnOff(item);
