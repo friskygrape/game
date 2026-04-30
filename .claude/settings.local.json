@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth *)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(gh repo *)",
+      "Bash(open \"/Users/deronli/Documents/Claude Code/Portfolio/index.html\")",
+      "Bash(open \"/Users/deronli/Documents/Claude Code/Portfolio/landingpage.html\")",
+      "Bash(open \"/Users/deronli/Documents/Claude Code/Portfolio/styleguide.html\")",
+      "Bash(node -e ' *)",
+      "Bash(gh api *)",
+      "Bash(git push *)"
+    ]
+  }
+}
