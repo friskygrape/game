@@ -816,11 +816,16 @@ let powerOn = false;
 b(0.70, 1.30, 0.06, MTL,   SX, 4.35, SZ);
 b(0.52, 1.00, 0.08, ADARK, SX, 4.50, SZ + 0.01);
 
-// LED indicator — red when off
+// LED indicator — red when off, green when on
 const switchLedMat = new THREE.MeshStandardMaterial({
   color: 0xff2200, emissive: 0xff2200, emissiveIntensity: 2.5, roughness: 0.3
 });
 b(0.16, 0.16, 0.12, switchLedMat, SX, 5.28, SZ + 0.02);
+
+// Glow light behind the LED — pulses when power is off
+const switchGlowLight = new THREE.PointLight(0xff2200, 2.0, 3.5);
+switchGlowLight.position.set(SX, 5.36, SZ + 0.5);
+scene.add(switchGlowLight);
 
 // Lever track
 b(0.12, 0.58, 0.12, 0x333355, SX, 4.55, SZ + 0.02);
@@ -898,6 +903,13 @@ canvas.addEventListener('click', e => {
     const ledColor = powerOn ? 0x00ff44 : 0xff2200;
     switchLedMat.color.set(ledColor);
     switchLedMat.emissive.set(ledColor);
+    if (powerOn) {
+      switchLedMat.emissiveIntensity = 2.5;
+      switchGlowLight.color.set(0x00ff44);
+      switchGlowLight.intensity = 0;
+    } else {
+      switchGlowLight.color.set(0xff2200);
+    }
     for (const item of clickables.values()) {
       powerOn ? turnOn(item) : turnOff(item);
     }
@@ -1087,6 +1099,13 @@ const AMBIENT_DUR    = 450;
   requestAnimationFrame(loop);
 
   const now = performance.now();
+  // Power switch LED pulse — breathes when off to attract attention
+  if (!powerOn) {
+    const pulse = 0.5 + 0.5 * Math.sin(now * 0.004);
+    switchLedMat.emissiveIntensity = 1.2 + pulse * 2.2;
+    switchGlowLight.intensity      = 0.6 + pulse * 2.0;
+  }
+
   for (const item of clickables.values()) {
     if (item.flickerStart === null) continue;
     const elapsed = now - item.flickerStart;
