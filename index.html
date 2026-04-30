@@ -308,9 +308,17 @@ function makeArcade(ax, az, sideCol = ASIDE, type = 'space') {
   return { screen, screenMat, light, screenCtx, screenTex, ctrl, neons };
 }
 
+const _pre1 = scene.children.length;
 const cab1 = makeArcade(-5.0, AZ, 0x080820, 'space');  // Space Blasters
+const _cab1M = scene.children.slice(_pre1).filter(c => c.isMesh);
+
+const _pre2 = scene.children.length;
 const cab2 = makeArcade(-2.5, AZ, 0x1a0606, 'fight');  // Street Kombat
+const _cab2M = scene.children.slice(_pre2).filter(c => c.isMesh);
+
+const _pre3 = scene.children.length;
 const cab3 = makeArcade( 0.0, AZ, 0x051408, 'race');   // Turbo Drift
+const _cab3M = scene.children.slice(_pre3).filter(c => c.isMesh);
 
 // ── Cabinet Side Art ──────────────────────────────────────
 // Applies a canvas texture to the right-facing side of each cabinet.
@@ -880,6 +888,22 @@ const clickables = new Map([
 
 const raycaster = new THREE.Raycaster();
 const mouse     = new THREE.Vector2();
+
+// Extend click targets to every mesh on each machine
+const _extendHits = (meshes, item) => meshes.forEach(m => { if (!clickables.has(m)) clickables.set(m, item); });
+_extendHits(_cab1M, clickables.get(cab1.screen));
+_extendHits(_cab2M, clickables.get(cab2.screen));
+_extendHits(_cab3M, clickables.get(cab3.screen));
+
+// Invisible hit box covering the full pinball cabinet
+const _pinHit = new THREE.Mesh(
+  new THREE.BoxGeometry(2.80, 5.50, 4.40),
+  new THREE.MeshBasicMaterial({ visible: false })
+);
+_pinHit.position.set(PX, 3.20, PZ);
+scene.add(_pinHit);
+clickables.set(_pinHit, clickables.get(pinballBack));
+
 const hitMeshes = [...clickables.keys()];
 
 function turnOn(item) {
