@@ -585,6 +585,11 @@ function pinBumper(bx, bz, col) {
 pinBumper(PX - 0.38, PZ + 0.50, NPN);
 pinBumper(PX + 0.36, PZ + 0.36, NCN);
 pinBumper(PX,        PZ + 0.18, NYL);
+const _bumpers = [
+  { x: PX - 0.38, z: PZ + 0.50, mat: eMat(NPN, 2.8), baseInt: 2.8, flash: 0 },
+  { x: PX + 0.36, z: PZ + 0.36, mat: eMat(NCN, 2.8), baseInt: 2.8, flash: 0 },
+  { x: PX,        z: PZ + 0.18, mat: eMat(NYL, 2.8), baseInt: 2.8, flash: 0 },
+];
 
 // Slingshot kickers — triangular, flanking the bumpers
 function addSlingshot(cx, cz, rotY, col) {
@@ -676,6 +681,7 @@ const ballMesh = new THREE.Mesh(
 ballMesh.position.set(PX + 0.88, pfY(PZ + 0.60) + 0.10, PZ + 0.60);
 ballMesh.castShadow = true;
 scene.add(ballMesh);
+const _pb = { x: PX - 0.20, z: PZ - 0.50, vx: 1.3, vz: 1.7, prevT: 0 };
 
 // Plunger lane divider
 const divMesh = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.28, 1.20), PB_CHROME);
@@ -1204,6 +1210,62 @@ const AMBIENT_DUR    = 450;
         c.gas.position.y = c.gasBaseY - 0.03;                      // gas held down while racing
       }
       cab3.screenTex.needsUpdate = true;
+    }
+  }
+
+  // Pinball ball + bumper flash animation
+  { const item = clickables.get(pinballBack);
+    if (item.on && item.flickerStart === null) {
+      const dt = _pb.prevT ? Math.min((now - _pb.prevT) * 0.001, 0.05) : 0;
+      _pb.prevT = now;
+      _pb.x += _pb.vx * dt;
+      _pb.z += _pb.vz * dt;
+
+      // Playfield wall bounds
+      const BNDL = PX - 0.96, BNDR = PX + 0.68;
+      const BNDT = PZ - 1.52, BNDB = PZ + 1.50;
+      if (_pb.x < BNDL) { _pb.x = BNDL; _pb.vx =  Math.abs(_pb.vx) + (Math.random()-0.5)*0.2; }
+      if (_pb.x > BNDR) { _pb.x = BNDR; _pb.vx = -Math.abs(_pb.vx) + (Math.random()-0.5)*0.2; }
+      if (_pb.z < BNDT) { _pb.z = BNDT; _pb.vz =  Math.abs(_pb.vz) + (Math.random()-0.5)*0.2; }
+      if (_pb.z > BNDB) { _pb.z = BNDB; _pb.vz = -Math.abs(_pb.vz) + (Math.random()-0.5)*0.2; }
+
+      // Clamp speed so it never crawls or flies off
+      const spd = Math.sqrt(_pb.vx*_pb.vx + _pb.vz*_pb.vz);
+      if (spd > 2.4) { _pb.vx *= 2.4/spd; _pb.vz *= 2.4/spd; }
+      if (spd < 1.2) { _pb.vx *= 1.2/spd; _pb.vz *= 1.2/spd; }
+
+      // Bumper collisions — reflect, boost, flash
+      for (const bmp of _bumpers) {
+        const dx = _pb.x - bmp.x, dz = _pb.z - bmp.z;
+        const dist = Math.sqrt(dx*dx + dz*dz);
+        if (dist < 0.36 && dist > 0.001) {
+          const nx = dx/dist, nz = dz/dist;
+          const dot = _pb.vx*nx + _pb.vz*nz;
+          _pb.vx -= 2*dot*nx; _pb.vz -= 2*dot*nz;
+          const s = Math.sqrt(_pb.vx*_pb.vx + _pb.vz*_pb.vz);
+          _pb.vx = (_pb.vx/s) * Math.max(s, 1.8);  // bumper gives a kick
+          _pb.vz = (_pb.vz/s) * Math.max(s, 1.8);
+          _pb.x = bmp.x + nx * 0.38;
+          _pb.z = bmp.z + nz * 0.38;
+          bmp.flash = 0.35;
+        }
+        if (bmp.flash > 0) {
+          bmp.flash = Math.max(0, bmp.flash - dt);
+          bmp.mat.emissiveIntensity = bmp.baseInt + 5.5 * (bmp.flash / 0.35);
+        } else {
+          bmp.mat.emissiveIntensity = bmp.baseInt;
+        }
+      }
+
+      ballMesh.position.set(_pb.x, pfY(_pb.z) + 0.10, _pb.z);
+    } else {
+      _pb.prevT = 0;
+      if (!item.on) {
+        // Reset to plunger lane when off
+        _pb.x = PX - 0.20; _pb.z = PZ - 0.50;
+        ballMesh.position.set(PX + 0.88, pfY(PZ + 0.60) + 0.10, PZ + 0.60);
+        for (const bmp of _bumpers) bmp.mat.emissiveIntensity = bmp.baseInt;
+      }
     }
   }
 
