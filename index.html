@@ -23,6 +23,8 @@
 'use strict';
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 // ── Renderer ──────────────────────────────────────────────
 const canvas = document.getElementById('c');
@@ -31,10 +33,18 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.35;
+
+RectAreaLightUniformsLib.init();
 
 // ── Scene ─────────────────────────────────────────────────
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0a1a);
+scene.background = new THREE.Color(0x100906);
+scene.fog = new THREE.FogExp2(0x100906, 0.008);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
 
 // ── Camera ────────────────────────────────────────────────
 const aspect = window.innerWidth / window.innerHeight;
@@ -44,8 +54,8 @@ camera.position.set(22, 22, 22);
 camera.lookAt(0, 3, 0);
 
 // ── Lighting ──────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0x8080ff, 0.42));
-const sun = new THREE.DirectionalLight(0xffffff, 0.15);
+scene.add(new THREE.AmbientLight(0xffc890, 0.12));
+const sun = new THREE.DirectionalLight(0xffd4a0, 0.08);
 sun.position.set(14, 28, 14);
 sun.castShadow = true;
 sun.shadow.camera.left = sun.shadow.camera.bottom = -22;
@@ -127,7 +137,7 @@ const NCN = 0x00eeff, NPN = 0xff00cc, NYL = 0xffee00, NGR = 0x00ff88;
 const ABODY = 0x100e25, ASIDE = 0x1c1a3e;
 
 // ── Room ──────────────────────────────────────────────────
-b(14, 0.10, 14, new THREE.MeshStandardMaterial({ color: 0x04040e, roughness: 0.45, metalness: 0.15 }), 0, -0.1, 0);
+b(14, 0.10, 14, new THREE.MeshStandardMaterial({ color: 0x04040e, roughness: 0.85, metalness: 0 }), 0, -0.1, 0);
 
 const starPalette = [NPN, NCN, NYL, NGR, 0xff2200, 0xcc00ff, 0xff6600];
 const ROWS = 11, COLS = 10, STEP_X = 1.52, STEP_Z = 1.40;
@@ -137,45 +147,65 @@ for (let row = 0; row < ROWS; row++) {
   const pz = START_Z + row * STEP_Z;
   for (let col = 0; col < COLS; col++) {
     const px = START_X + offsetX + col * STEP_X;
-    const sm = std(starPalette[(row * 3 + col) % starPalette.length], 0.5, 0.1);
+    const sm = eMat(starPalette[(row * 3 + col) % starPalette.length], 2.2);
     b(0.48, 0.018, 0.10, sm, px, 0.0, pz);
     b(0.10, 0.018, 0.48, sm, px, 0.0, pz);
   }
 }
 
-b(0.3, 10, 14, WALL, -7, 0, 0);
-b(14, 10, 0.3, WALL,  0, 0, -7);
+{ // Wood panel walls
+  const W = 128, H = 512;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d');
+  // Base coat — dark walnut
+  c.fillStyle = '#3a1808'; c.fillRect(0, 0, W, H);
+  // Grain lines — vertical, slightly wavy
+  for (let i = 0; i < 220; i++) {
+    const x = (i * 13.7) % W;
+    const alpha = 0.03 + (i % 5) * 0.018;
+    c.strokeStyle = (i % 3 === 0) ? `rgba(180,70,12,${alpha})` : `rgba(8,3,1,${alpha * 1.8})`;
+    c.lineWidth = 0.4 + (i % 4) * 0.4;
+    c.beginPath(); c.moveTo(x, 0);
+    for (let y = 0; y <= H; y += 16) c.lineTo(x + Math.sin(y * 0.04 + i * 0.9) * 4, y);
+    c.stroke();
+  }
+  // Knot suggestion — subtle oval darker patch
+  c.fillStyle = 'rgba(12,4,1,0.22)';
+  c.beginPath(); c.ellipse(W * 0.4, H * 0.35, 14, 22, 0.2, 0, Math.PI * 2); c.fill();
+  // Plank seam — right edge (tiles into a seam between planks)
+  c.fillStyle = 'rgba(0,0,0,0.75)'; c.fillRect(W - 2, 0, 2, H);
+  c.fillStyle = 'rgba(200,90,20,0.10)'; c.fillRect(0, 0, 2, H);
+  const t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.repeat.set(7, 1);
+  const woodMat = new THREE.MeshStandardMaterial({ map: t, roughness: 0.78, metalness: 0.02 });
+  b(0.3, 10, 14, woodMat, -7, 0, 0);
+  b(14, 10, 0.3, woodMat,  0, 0, -7);
+}
 b(0.4, 0.4, 14.3, TRIM, -7, 10, 0);
 b(14.3, 0.4, 0.4, TRIM,  0, 10, -7);
 b(0.4, 10,  0.4,  TRIM, -7,  0, -7);
 b(0.2, 0.2, 14,   TRIM, -7,  0, 0);
 b(14,  0.2, 0.2,  TRIM,  0,  0, -7);
 
-const cyanStrip = nb(0.10, 0.18, 13.4, NCN, 9.0, -6.84, 9.5, 0);
-const cyanStripLight1 = new THREE.PointLight(NCN, 3.0, 18);
-cyanStripLight1.position.set(-6.0, 9.0, -3.5); scene.add(cyanStripLight1);
-const cyanStripLight2 = new THREE.PointLight(NCN, 3.0, 18);
-cyanStripLight2.position.set(-6.0, 9.0,  3.5); scene.add(cyanStripLight2);
-
-const pinkStrip = nb(13.4, 0.18, 0.10, NPN, 9.0, 0, 9.5, -6.84);
-const pinkStripLight1 = new THREE.PointLight(NPN, 3.0, 18);
-pinkStripLight1.position.set(-3.5, 9.0, -6.0); scene.add(pinkStripLight1);
-const pinkStripLight2 = new THREE.PointLight(NPN, 3.0, 18);
-pinkStripLight2.position.set( 3.5, 9.0, -6.0); scene.add(pinkStripLight2);
-
-cyanStrip.material.emissiveIntensity = 0;
-cyanStripLight1.intensity = 0; cyanStripLight2.intensity = 0;
-pinkStrip.material.emissiveIntensity = 0;
-pinkStripLight1.intensity = 0; pinkStripLight2.intensity = 0;
+// Warm fill light — invisible, lights the whole scene
+// Fluorescent ceiling panels — RectAreaLight for realistic area lighting
+const fluorA = new THREE.RectAreaLight(0xfffde8, 0, 9, 7);
+fluorA.position.set(-1, 9.4, -1.5); fluorA.rotation.x = -Math.PI / 2;
+scene.add(fluorA);
+const fluorB = new THREE.RectAreaLight(0xfffde8, 0, 9, 5);
+fluorB.position.set(-1, 9.4, -5.5); fluorB.rotation.x = -Math.PI / 2;
+scene.add(fluorB);
 
 
 // ── Cabinet shared geometry ───────────────────────────────
 const HALF_W = 0.90, WIDTH = HALF_W * 2;
 const SW = WIDTH * 0.80, SH = 1.28;
 
-const bodyMat = new THREE.MeshStandardMaterial({ color: ABODY, flatShading: true, roughness: 0.80, metalness: 0.05 });
-const sideMat = new THREE.MeshStandardMaterial({ color: ASIDE, flatShading: true, roughness: 0.75, metalness: 0.05 });
-const sidePanelMat = new THREE.MeshStandardMaterial({ color: ASIDE, flatShading: true, roughness: 0.75, metalness: 0.05, side: THREE.DoubleSide });
+const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a2835, flatShading: true, roughness: 0.22, metalness: 0.85 });
+const sideMat = new THREE.MeshStandardMaterial({ color: 0x353348, flatShading: true, roughness: 0.22, metalness: 0.85 });
+const sidePanelMat = new THREE.MeshStandardMaterial({ color: 0x353348, flatShading: true, roughness: 0.22, metalness: 0.85, side: THREE.DoubleSide });
 
 // Neon Drift 91 — one TextureLoader per surface with cover-fit repeat/offset (avoids canvas taint on file://)
 function _neonTex(repeatX, repeatY, offsetX, offsetY) {
@@ -441,8 +471,8 @@ function makeCabinet(ax, az, type) {
   scene.add(group);
 
   const localBodyMat = new THREE.MeshStandardMaterial({
-    color: type === 'space' ? 0x0e0028 : 0x1a1a1a,
-    flatShading: true, roughness: 0.80, metalness: 0.05,
+    color: type === 'space' ? 0x2a2835 : 0x2a2a2a,
+    flatShading: true, roughness: 0.22, metalness: 0.85,
   });
 
   // Side panel materials — image on right outer face only; walls + left panel stay dark
@@ -641,6 +671,8 @@ cab1.neons.push({ mat: applyMarquee(-5.0, 'SPACE BLASTERS', 0x00eeff), onInt: 2.
 cab2.neons.push({ mat: applyMarquee(-2.5, 'STREET KOMBAT',  0xff00cc), onInt: 2.8 });
 cab3.neons.push({ mat: applyMarquee( 0.0, 'TURBO DRIFT',    0x00ff88), onInt: 2.8 });
 
+const signControls = [];
+
 // ── 90s Arcade Decorations ─────────────────────────────────
 (function() {
   function dTex(w, h, fn) {
@@ -655,13 +687,13 @@ cab3.neons.push({ mat: applyMarquee( 0.0, 'TURBO DRIFT',    0x00ff88), onInt: 2.
   }
   function pMesh(tex, pw, ph, x, y, z, rotY) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(pw, ph),
-      new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0, side: THREE.DoubleSide }));
+      new THREE.MeshStandardMaterial({ map: tex, roughness: 0.35, metalness: 0, side: THREE.DoubleSide }));
     m.rotation.y = rotY; m.position.set(x, y, z); scene.add(m);
   }
   const WZ = -6.80, WX = -6.80;
 
   // ARCADE neon sign — back wall, above pinball machine
-  wMesh(dTex(512, 160, (c,W,H) => {
+  const arcSign = wMesh(dTex(512, 160, (c,W,H) => {
     c.fillStyle = '#000012'; c.fillRect(0,0,W,H);
     c.strokeStyle = '#ff00cc'; c.lineWidth = 4; c.shadowColor = '#ff00cc'; c.shadowBlur = 12;
     c.strokeRect(7,7,W-14,H-14); c.shadowBlur = 0;
@@ -671,7 +703,9 @@ cab3.neons.push({ mat: applyMarquee( 0.0, 'TURBO DRIFT',    0x00ff88), onInt: 2.
     c.fillText('ARCADE', W/2, H/2); c.shadowBlur = 22; c.fillText('ARCADE', W/2, H/2);
     c.shadowBlur = 0; c.fillStyle = '#ffe0ff'; c.fillText('ARCADE', W/2, H/2);
   }), 4.0, 1.25, 3.5, 8.2, WZ, 0, 0.65);
-  const arcL = new THREE.PointLight(NPN, 1.2, 10); arcL.position.set(3.5, 8.2, WZ + 0.6); scene.add(arcL);
+  arcSign.material.emissiveIntensity = 0;
+  const arcL = new THREE.PointLight(NPN, 0, 14); arcL.position.set(3.5, 8.2, WZ + 0.6); scene.add(arcL);
+  signControls.push({ mat: arcSign.material, light: arcL, onEI: 0.65, onLit: 2.5 });
 
   // Galaxy Forge poster — back wall, right of cabinets
   pMesh(new THREE.TextureLoader().load('images/galaxyforgeposter.png'), 1.6, 2.24, WX, 4.2, 1.0, Math.PI/2);
@@ -686,7 +720,7 @@ cab3.neons.push({ mat: applyMarquee( 0.0, 'TURBO DRIFT',    0x00ff88), onInt: 2.
   pMesh(new THREE.TextureLoader().load('images/steelgalaxyposter.png'), 1.6, 2.24, WX, 4.2, -3.8, Math.PI/2);
 
   // HIGH SCORE neon sign — left wall, high
-  wMesh(dTex(384, 128, (c,W,H) => {
+  const hsSign = wMesh(dTex(384, 128, (c,W,H) => {
     c.fillStyle = '#000018'; c.fillRect(0,0,W,H);
     c.strokeStyle = '#ffee00'; c.lineWidth = 3.5; c.shadowColor = '#ffee00'; c.shadowBlur = 12;
     c.strokeRect(6,6,W-12,H-12); c.shadowBlur = 0;
@@ -696,10 +730,12 @@ cab3.neons.push({ mat: applyMarquee( 0.0, 'TURBO DRIFT',    0x00ff88), onInt: 2.
     c.fillText('HIGH SCORE', W/2, H/2); c.shadowBlur = 20; c.fillText('HIGH SCORE', W/2, H/2);
     c.shadowBlur = 0; c.fillStyle = '#ffffcc'; c.fillText('HIGH SCORE', W/2, H/2);
   }), 2.8, 0.94, WX, 7.6, -2.5, Math.PI/2, 0.65);
-  const hsL = new THREE.PointLight(NYL, 0.8, 7); hsL.position.set(WX+0.5, 7.6, -2.5); scene.add(hsL);
+  hsSign.material.emissiveIntensity = 0;
+  const hsL = new THREE.PointLight(NYL, 0, 12); hsL.position.set(WX+0.5, 7.6, -2.5); scene.add(hsL);
+  signControls.push({ mat: hsSign.material, light: hsL, onEI: 0.65, onLit: 2.0 });
 
   // INSERT COIN sign — left wall, low near cabinets
-  wMesh(dTex(256, 100, (c,W,H) => {
+  const icSign = wMesh(dTex(256, 100, (c,W,H) => {
     c.fillStyle = '#00001a'; c.fillRect(0,0,W,H);
     c.strokeStyle = '#00eeff'; c.lineWidth = 2.5; c.shadowColor = '#00eeff'; c.shadowBlur = 10;
     c.strokeRect(5,5,W-10,H-10); c.shadowBlur = 0;
@@ -709,7 +745,9 @@ cab3.neons.push({ mat: applyMarquee( 0.0, 'TURBO DRIFT',    0x00ff88), onInt: 2.
     c.fillText('► INSERT COIN ◄', W/2, H/2); c.shadowBlur = 10; c.fillText('► INSERT COIN ◄', W/2, H/2);
     c.shadowBlur = 0; c.fillStyle = '#aaffff'; c.fillText('► INSERT COIN ◄', W/2, H/2);
   }), 1.9, 0.74, WX, 3.0, -2.0, Math.PI/2, 0.6);
-  const icL = new THREE.PointLight(NCN, 0.5, 5); icL.position.set(WX+0.4, 3.0, -2.0); scene.add(icL);
+  icSign.material.emissiveIntensity = 0;
+  const icL = new THREE.PointLight(NCN, 0, 10); icL.position.set(WX+0.4, 3.0, -2.0); scene.add(icL);
+  signControls.push({ mat: icSign.material, light: icL, onEI: 0.6, onLit: 1.5 });
 })();
 
 // ── Pinball Machine ───────────────────────────────────────
@@ -861,6 +899,117 @@ const lbMesh=(function(){
   mesh.position.set(PX,bgY+1.30,PZ-1.59); mesh.visible=false; scene.add(mesh); return mesh;
 })();
 
+// ── Props — trash cans, ashtray stand, vending machine ────
+(function () {
+  const chrome  = std(0x9898b8, 0.22, 0.65);
+  const sandMat = std(0x887766, 0.90, 0.02);
+
+  function trashCan(x, z) {
+    cyl(0.40, 0.46, 1.72, std(0x101018, 0.82, 0.06), x, 0, z, 16);
+    cyl(0.50, 0.50, 0.06, chrome, x, 1.72, z, 16);
+    cyl(0.44, 0.43, 0.03, std(0x0a0a14, 0.90), x, 1.78, z, 16);
+  }
+
+  function ashtrayStand(x, z) {
+    cyl(0.38, 0.42, 0.08, chrome, x, 0.00, z, 14);   // weighted base
+    cyl(0.06, 0.06, 2.12, chrome, x, 0.08, z, 10);   // pole
+    cyl(0.09, 0.07, 0.14, chrome, x, 2.20, z, 10);   // collar where pole meets bowl
+    cyl(0.46, 0.34, 0.09, chrome, x, 2.34, z, 18);   // wide flat ashtray bowl
+    cyl(0.30, 0.26, 0.04, sandMat, x, 2.41, z, 16);  // ash/sand fill
+  }
+
+  trashCan(1.60, -5.30);   // between cab3 and pinball
+  trashCan(-0.80, 3.20);   // front-centre area
+  ashtrayStand(3.50, 2.00);
+
+  // ── Vending machine ───────────────────────────────────────
+  const vmX = 6.00, vmZ = 3.50;
+  // Body: 2.0 deep (x), 5.60 tall (y), 2.60 wide (z) — front face on +z side
+  b(2.00, 5.60, 2.60, std(0x1c0a2a, 0.65, 0.20), vmX, 0, vmZ);
+  // Top neon bar
+  nb(2.02, 0.12, 2.62, NCN, 2.4, vmX, 5.60, vmZ);
+  // Vertical accent stripes flanking display on +z face
+  nb(0.06, 5.52, 0.06, NPN, 1.2, vmX - 0.72, 0.04, vmZ + 1.32);
+  nb(0.06, 5.52, 0.06, NPN, 1.2, vmX + 0.72, 0.04, vmZ + 1.32);
+
+  // Product display canvas — placed on +z front face (face at vmZ + 1.30)
+  const dW = 256, dH = 544;
+  const dCv = document.createElement('canvas'); dCv.width = dW; dCv.height = dH;
+  const dCtx = dCv.getContext('2d');
+  dCtx.fillStyle = '#030015'; dCtx.fillRect(0, 0, dW, dH);
+  const prods = [
+    { c: '#cc0022', l: 'COLA',   p: '75¢' },
+    { c: '#ff6600', l: 'CITRUS', p: '75¢' },
+    { c: '#00aaff', l: 'AQUA',   p: '80¢' },
+    { c: '#00cc44', l: 'LIME',   p: '80¢' },
+    { c: '#aa00cc', l: 'GRAPE',  p: '75¢' },
+    { c: '#ffcc00', l: 'LEMON',  p: '85¢' },
+  ];
+  prods.forEach((p, i) => {
+    const ci = i % 2, ri = Math.floor(i / 2);
+    const cx = 64 + ci * 128, cy = 90 + ri * 160;
+    const g = dCtx.createLinearGradient(cx - 28, 0, cx + 28, 0);
+    g.addColorStop(0, '#000'); g.addColorStop(0.25, p.c);
+    g.addColorStop(0.75, p.c); g.addColorStop(1, '#000');
+    dCtx.fillStyle = g; dCtx.beginPath(); dCtx.roundRect(cx - 28, cy - 44, 56, 66, 8); dCtx.fill();
+    dCtx.fillStyle = 'rgba(255,255,255,0.12)'; dCtx.fillRect(cx - 22, cy - 40, 14, 60);
+    dCtx.fillStyle = 'rgba(210,210,210,0.85)';
+    dCtx.fillRect(cx - 24, cy - 46, 48, 5); dCtx.fillRect(cx - 24, cy + 20, 48, 5);
+    dCtx.font = 'bold 11px monospace'; dCtx.textAlign = 'center'; dCtx.textBaseline = 'middle';
+    dCtx.shadowColor = p.c; dCtx.shadowBlur = 6; dCtx.fillStyle = '#ffffff';
+    dCtx.fillText(p.l, cx, cy - 6); dCtx.shadowBlur = 0;
+    dCtx.font = '10px monospace'; dCtx.fillStyle = '#ffdd00'; dCtx.fillText(p.p, cx, cy + 12);
+    if (ci === 1 && ri < 2) {
+      dCtx.strokeStyle = '#ffffff20'; dCtx.lineWidth = 1;
+      dCtx.beginPath(); dCtx.moveTo(0, cy + 70); dCtx.lineTo(dW, cy + 70); dCtx.stroke();
+    }
+  });
+  // Sold-out overlay (LEMON: ci=1, ri=2 → cx=192, cy=410)
+  dCtx.fillStyle = 'rgba(0,0,0,0.82)'; dCtx.beginPath(); dCtx.roundRect(164, 366, 56, 88, 8); dCtx.fill();
+  dCtx.font = 'bold 10px monospace'; dCtx.textAlign = 'center';
+  dCtx.fillStyle = '#ff2200'; dCtx.shadowColor = '#ff2200'; dCtx.shadowBlur = 8;
+  dCtx.fillText('SOLD OUT', 192, 412); dCtx.shadowBlur = 0;
+  dCtx.fillStyle = 'rgba(255,255,255,0.035)';
+  dCtx.beginPath(); dCtx.moveTo(0, 0); dCtx.lineTo(70, 0); dCtx.lineTo(0, dH); dCtx.closePath(); dCtx.fill();
+  const dTex = new THREE.CanvasTexture(dCv); dTex.colorSpace = THREE.SRGBColorSpace;
+  const dMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.60, 3.40),
+    new THREE.MeshStandardMaterial({ map: dTex, emissiveMap: dTex,
+      emissive: new THREE.Color(1, 1, 1), emissiveIntensity: 0.30, roughness: 0.08 }));
+  dMesh.position.set(vmX, 3.30, vmZ + 1.302); scene.add(dMesh);
+
+  // REFRESH logo panel
+  const lW = 256, lH = 80;
+  const lCv = document.createElement('canvas'); lCv.width = lW; lCv.height = lH;
+  const lCtx = lCv.getContext('2d');
+  lCtx.fillStyle = '#0a0020'; lCtx.fillRect(0, 0, lW, lH);
+  lCtx.font = 'bold 40px "Arial Black",Impact,sans-serif';
+  lCtx.textAlign = 'center'; lCtx.textBaseline = 'middle';
+  lCtx.shadowColor = '#00eeff'; lCtx.shadowBlur = 28; lCtx.fillStyle = '#00eeff';
+  lCtx.fillText('REFRESH', lW / 2, lH / 2);
+  lCtx.shadowBlur = 10; lCtx.fillStyle = '#ccffff'; lCtx.fillText('REFRESH', lW / 2, lH / 2); lCtx.shadowBlur = 0;
+  const lTex = new THREE.CanvasTexture(lCv); lTex.colorSpace = THREE.SRGBColorSpace;
+  const lMesh = new THREE.Mesh(new THREE.PlaneGeometry(1.60, 0.60),
+    new THREE.MeshStandardMaterial({ map: lTex, emissiveMap: lTex,
+      emissive: new THREE.Color(1, 1, 1), emissiveIntensity: 0.80, roughness: 0.30 }));
+  lMesh.position.set(vmX, 5.22, vmZ + 1.302); scene.add(lMesh);
+
+  // Selection buttons — 2 rows × 3 cols, below display window
+  const btnColors = [NPN, NCN, NYL, NGR, 0xff6600, 0xcc00ff];
+  btnColors.forEach((hexCol, i) => {
+    const ci = i % 3, ri = Math.floor(i / 3);
+    b(0.10, 0.10, 0.10, eMat(hexCol, 1.6), vmX - 0.40 + ci * 0.40, 0.54 + ri * 0.26, vmZ + 1.32);
+  });
+  // Coin slot (narrow vertical slot, right side of lower panel)
+  b(0.06, 0.18, 0.10, std(0x666677, 0.3, 0.4), vmX + 0.60, 1.00, vmZ + 1.32);
+  b(0.03, 0.12, 0.06, std(0x030308, 0.99), vmX + 0.60, 1.02, vmZ + 1.325);
+  // Dispenser tray (bottom front)
+  b(1.00, 0.08, 0.24, chrome, vmX, 0.38, vmZ + 1.40);
+  b(0.92, 0.22, 0.08, std(0x030308, 0.99), vmX, 0.42, vmZ + 1.325);
+  // Ambient glow light
+  const vmL = new THREE.PointLight(NCN, 0.8, 8.0);
+  vmL.position.set(vmX - 2.0, 2.0, vmZ + 1.8); scene.add(vmL);
+})();
+
 // ── Power Switch ──────────────────────────────────────────
 const SX=5.5, SZ=-6.86;
 let powerOn=false;
@@ -878,16 +1027,11 @@ const switchHitArea=new THREE.Mesh(new THREE.BoxGeometry(0.70,1.30,0.22),new THR
 switchHitArea.position.set(SX,4.35+0.65,SZ+0.05); scene.add(switchHitArea);
 
 // ── Interaction ───────────────────────────────────────────
-const _cyanLP={get intensity(){return cyanStripLight1.intensity;},set intensity(v){cyanStripLight1.intensity=cyanStripLight2.intensity=v;}};
-const _pinkLP ={get intensity(){return pinkStripLight1.intensity; },set intensity(v){pinkStripLight1.intensity =pinkStripLight2.intensity =v;}};
-
 const clickables=new Map([
   [cab1.screen,{mat:cab1.screenMat,light:cab1.light,on:false,onInt:4.5,offInt:0,onLit:7.0,offLit:0.25,flickerStart:null,flickerDur:950, flickerHz:22,neons:cab1.neons}],
   [cab2.screen,{mat:cab2.screenMat,light:cab2.light,on:false,onInt:4.5,offInt:0,onLit:7.0,offLit:0.25,flickerStart:null,flickerDur:1500,flickerHz:11,neons:cab2.neons}],
   [cab3.screen,{mat:cab3.screenMat,light:cab3.light,on:false,onInt:4.5,offInt:0,onLit:7.0,offLit:0.25,flickerStart:null,flickerDur:680, flickerHz:31,neons:cab3.neons}],
   [pinballBack,{mat:pinballBackMat,light:pinballLight,on:false,onInt:1.3,offInt:0.15,onLit:1.3,offLit:0.3,flickerStart:null,flickerDur:1900,flickerHz:7}],
-  [cyanStrip,  {mat:cyanStrip.material,light:_cyanLP,on:false,onInt:3.0,offInt:0,onLit:0.5,offLit:0,flickerStart:null,flickerDur:1300,flickerHz:9, isStrip:true}],
-  [pinkStrip,  {mat:pinkStrip.material,light:_pinkLP, on:false,onInt:7.5,offInt:0,onLit:2.0,offLit:0,flickerStart:null,flickerDur:850, flickerHz:17,isStrip:true}],
 ]);
 
 // Map every mesh in each cabinet group to its clickable item
@@ -925,6 +1069,8 @@ canvas.addEventListener('click', e=>{
     if(powerOn){ switchLedMat.emissiveIntensity=2.5; switchGlowLight.color.set(0x00ff44); switchGlowLight.intensity=0; }
     else { switchGlowLight.color.set(0x00eeff); }
     for(const item of clickables.values()) powerOn?turnOn(item):turnOff(item);
+    for(const s of signControls){ s.mat.emissiveIntensity=powerOn?s.onEI:0; s.light.intensity=powerOn?s.onLit:0; }
+    fluorA.intensity = fluorB.intensity = powerOn ? 14 : 0;
     lbMesh.visible=powerOn; return;
   }
   const hit=raycaster.intersectObjects(hitMeshes)[0];
@@ -949,6 +1095,8 @@ switchLedMat.emissiveIntensity = 2.5;
 switchGlowLight.color.set(0x00ff44); switchGlowLight.intensity = 0;
 const _uniqueItems = new Set(clickables.values());
 for (const item of _uniqueItems) turnOn(item);
+for(const s of signControls){ s.mat.emissiveIntensity=s.onEI; s.light.intensity=s.onLit; }
+fluorA.intensity = fluorB.intensity = 1.5;
 lbMesh.visible = true;
 
 // ── Game animations ───────────────────────────────────────
