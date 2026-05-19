@@ -1,2 +1,27 @@
+# macOS Finder metadata
 .DS_Store
 **/.DS_Store
+
+# Local Claude Code config (memory, permissions, IDE launch settings)
+.claude/settings.local.json
+.claude/memory/
+
+# Editor
+.vscode/
+.idea/
+
+# Environment variables and secrets
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
